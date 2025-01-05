@@ -1,0 +1,144 @@
+# Meme Battles: Official Rules
+
+## Core Concept
+Meme Battles is a strategic card game where players battle using iconic meme characters, each with unique abilities and stats. Win by either defeating your opponent's Meme Lord (main character) or by achieving maximum Viral Status (victory points).
+
+## Card Types
+
+### Meme Lords (Your Main Character)
+- Starts with 20 HP
+- Can use one Action per turn
+- Special ability unique to each Meme Lord
+- Examples:
+  - Gigachad: Once per game, can flex to become immune to damage for one turn
+  - Doge: Much wow ability allows drawing an extra card each turn
+  - Pepe: Can "feels bad man" to reverse any attack once per game
+
+### Meme Cards (Your Battle Cards)
+Each card has:
+- Attack Power (0-10)
+- Defense (0-10)
+- Clout Level (1-3 stars, like rarity)
+- Special Effect
+- Element Type (more on this below)
+
+## Element Types
+- **Wholesome** (💖): Good against Toxic, weak to Cursed
+- **Toxic** (☢️): Good against Dank, weak to Wholesome
+- **Dank** (🔥): Good against Cursed, weak to Toxic
+- **Cursed** (👻): Good against Wholesome, weak to Dank
+
+Element advantages deal +2 damage, disadvantages deal -1 damage.
+
+## Game Setup
+1. Each player:
+   - Selects one Meme Lord
+   - Builds a deck of 20 cards
+   - Draws 5 cards
+   - Starts with 20 HP on their Meme Lord
+
+## Turn Structure
+
+### 1. Draw Phase
+- Draw 1 card
+- If you have Doge as Meme Lord, draw 2 cards
+
+### 2. Vibe Check
+- Gain 1 Viral Point for each card you control
+- First to 10 Viral Points wins the game
+
+### 3. Action Phase (Do any 2 of these):
+- Play a Meme Card
+- Attack with a card
+- Use your Meme Lord's ability
+- Use a card's special ability
+
+### 4. End Phase
+- Max hand size is 7, discard extras
+- Effects marked "Until end of turn" wear off
+
+## Combat Rules
+
+### Basic Combat
+1. Declare attacker
+2. Opponent can declare blocker
+3. Compare Attack vs Defense
+4. Excess damage goes through to Meme Lord if unblocked
+
+### Special Rules
+- Cards can't attack the turn they're played (summoning sickness)
+- Blocked damage doesn't hurt Meme Lord
+- Element advantages apply bonus/reduced damage
+
+## Special Abilities
+
+### Common Abilities
+- **Share**: Draw a card
+- **Subscribe**: Gain 1 Viral Point
+- **Ratio**: Target card's Attack becomes 0 until end of turn
+- **Speedrun**: Can attack the turn it's played
+
+### Clout Level Abilities (By Rarity)
+- **1 Star**: Basic effects (draw, small buffs)
+- **2 Stars**: Medium effects (element switching, stat boosts)
+- **3 Stars**: Powerful effects (multiple actions, copying abilities)
+
+## Sample Cards
+
+### Nyan Cat (2-Star Card)
+- Attack: 4
+- Defense: 3
+- Element: Wholesome
+- Ability: "Rainbow Trail" - Once per turn, heal your Meme Lord for 2 HP
+
+### Sigma Male (3-Star Card)
+- Attack: 8
+- Defense: 6
+- Element: Toxic
+- Ability: "Grindset" - Gains +1 Attack for each other card you control
+
+### Keyboard Cat (1-Star Card)
+- Attack: 3
+- Defense: 4
+- Element: Wholesome
+- Ability: "Play Him Off" - When played, return one card to its owner's hand
+
+## Victory Conditions
+Win by either:
+1. Reducing opponent's Meme Lord to 0 HP
+2. Reaching 10 Viral Points
+3. Opponent can't draw a card when required
+
+## Advanced Rules (Optional)
+
+### Combo System
+Some cards have combo effects when played together:
+- Doge + Cheems = Draw 2 cards
+- Pepe + Feels Good Man = Heal 5 HP
+- Any 3 cards of same element = +2 Viral Points
+
+### Meme Economy
+- Each turn you get +1 Meme Coin
+- Cards cost Meme Coins to play based on their Clout Level
+- Save coins for bigger plays or use them for small advantages
+
+## Quick Reference
+
+### Turn Order
+1. Draw
+2. Vibe Check (Viral Points)
+3. Two Actions
+4. End Phase
+
+### Combat Math
+- Base Damage = Attacker's Attack - Blocker's Defense
+- Element Bonus: +2 damage
+- Element Penalty: -1 damage
+
+### Key Terms
+- **Ratio'd**: Attack becomes 0
+- **Based**: Immune to effects this turn
+- **No Cap**: Double damage this turn
+- **Touch Grass**: Skip your next turn to heal fully
+
+Remember: The goal is to have fun! Rules can be adjusted for casual play or made more complex for tournaments.

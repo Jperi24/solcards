@@ -43,7 +43,7 @@ const Header = () => {
               href="/myCards"
               className={`px-4 py-2 rounded-lg transition-all duration-200 
                 ${
-                  isActive("/collection")
+                  isActive("/myCards")
                     ? "bg-purple-500/20 text-purple-400 border border-purple-500/50"
                     : "text-gray-300 hover:text-white hover:bg-white/5"
                 }`}

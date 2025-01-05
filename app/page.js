@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { Sparkles, Wallet, Gift, Library } from "lucide-react";
-import Header from "../components/header";
+import Header from "./components/header";
 
 const NFTRedemption = () => {
   const [connected, setConnected] = useState(false);

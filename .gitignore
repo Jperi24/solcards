@@ -13,6 +13,9 @@
 # testing
 /coverage
 
+public/card-images/*
+!public/card-images/.gitkeep
+
 # next.js
 /.next/
 /out/
