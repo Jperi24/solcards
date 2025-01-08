@@ -2,39 +2,41 @@
 import { NextResponse } from 'next/server';
 import { MemeCardGenerator } from '@/app/lib/memeCardGenerator';
 
-// Initialize with both API keys
-const generator = new MemeCardGenerator(
-  process.env.OPENAI_API_KEY || '',
-  process.env.REPLICATE_API_KEY || ''
-);
-
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
     console.log('Starting card generation...');
     
-    const { wallet_address } = await req.json();
-    console.log('Wallet address:', wallet_address);
+    const openaiKey = process.env.OPENAI_API_KEY;
+    const replicateKey = process.env.REPLICATE_API_KEY;
+
+    if (!openaiKey || !replicateKey) {
+      return NextResponse.json(
+        { error: 'Missing API keys' },
+        { status: 500 }
+      );
+    }
+
+    const generator = new MemeCardGenerator(openaiKey, replicateKey);
     
-    // Generate the card
+    // Test connections first
+    const connections = await generator.testConnections();
+    console.log('API connections status:', connections);
+
+    if (!connections.openai || !connections.replicate) {
+      return NextResponse.json(
+        { error: 'API services not available' },
+        { status: 503 }
+      );
+    }
+
     const card = await generator.generateCard();
-    console.log('Generated card:', {
-      ...card,
-      image_path: card.image_path ? 'Image URL exists' : 'No image URL'
-    });
-    
-    return NextResponse.json({ 
-      success: true, 
-      card: card 
-    });
-    
+    console.log('Generated card:', card);
+
+    return NextResponse.json(card);
   } catch (error) {
-    console.error('Error in API route:', error);
+    console.error('Error generating card:', error);
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Unknown error',
-        details: error instanceof Error ? error.stack : undefined
-      },
+      { error: error instanceof Error ? error.message : 'Failed to generate card' },
       { status: 500 }
     );
   }

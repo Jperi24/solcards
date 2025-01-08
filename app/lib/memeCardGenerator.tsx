@@ -5,12 +5,45 @@ import type { Card, ElementType, RarityType } from '@/app/types/cards';
 export class MemeCardGenerator {
   private openai: OpenAI;
   private replicate: Replicate;
+  private readonly REPLICATE_MODEL_VERSION = "8beff3369e81422112d93b89ca01426147de542cd4684c244b673b105188fe5f";
   private readonly elements: ElementType[] = ['WHOLESOME', 'TOXIC', 'DANK', 'CURSED'];
   private readonly rarities: RarityType[] = ['COMMON', 'RARE', 'EPIC', 'LEGENDARY', 'MYTHIC', 'GOD_TIER'];
 
   constructor(openaiApiKey: string, replicateApiKey: string) {
+    if (!openaiApiKey) throw new Error('OpenAI API key is required');
+    if (!replicateApiKey) throw new Error('Replicate API key is required');
+
     this.openai = new OpenAI({ apiKey: openaiApiKey });
     this.replicate = new Replicate({ auth: replicateApiKey });
+  }
+
+  public async testConnections(): Promise<{ openai: boolean; replicate: boolean }> {
+    const results = { openai: false, replicate: false };
+    
+    try {
+      await this.openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [{ role: "user", content: "test" }],
+        max_tokens: 1
+      });
+      results.openai = true;
+    } catch (error) {
+      console.error('OpenAI connection test failed:', error);
+    }
+
+    try {
+      const response = await fetch('https://api.replicate.com/v1/models', {
+        headers: {
+          'Authorization': `Token ${this.replicate.auth}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      results.replicate = response.ok;
+    } catch (error) {
+      console.error('Replicate connection test failed:', error);
+    }
+
+    return results;
   }
 
   private async generateCardName(element: ElementType, rarity: RarityType): Promise<string> {
@@ -79,87 +112,60 @@ export class MemeCardGenerator {
 
   private async generateImage(element: ElementType, rarity: RarityType, name: string): Promise<string> {
     try {
-      const style = {
-        COMMON: "simple meme style, clean digital art",
-        RARE: "detailed meme artwork, vibrant colors",
-        EPIC: "high-quality digital art with special effects, dynamic lighting",
-        LEGENDARY: "premium fantasy artwork with spectacular effects, cinematic quality",
-        MYTHIC: "ethereal digital masterpiece with cosmic effects, otherworldly",
-        GOD_TIER: "divine cosmic artwork, ultra-realistic, mind-bending quality"
-      }[rarity];
-
-      const promptResponse = await this.openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: [
-          { role: "system", content: "You are a creative image prompt generator for meme cards." },
-          {
-            role: "user",
-            content: `Create a detailed, artistic prompt for an AI image generator to create a meme-themed trading card illustration.
-              Card Name: "${name}"
-              Element Type: ${element}
-              Style: ${style}
-              
-              Focus on:
-              - Modern meme culture and internet references
-              - Trading card game art style
-              - Clear central figure or subject
-              - Appropriate mood for the element type
-              - ${rarity} level of detail and effects
-              
-              Keep it detailed but under 100 words.`
-          }
-        ],
-        max_tokens: 200,
-        temperature: 0.7
-      });
-
-      const imagePrompt = promptResponse.choices[0]?.message?.content?.trim() || "";
+      const imagePrompt = await this.generateImagePrompt(element, rarity, name);
       console.log('Generated image prompt:', imagePrompt);
 
-      const prediction = await this.replicate.run(
-        "stability-ai/sdxl:d830ba5dabf8090ec0db6c10fc862c6eb1c929e1a194a5411852d25fd954ac82",
+      const output = await this.replicate.run(
+        "ideogram-ai/ideogram-v2",
         {
           input: {
             prompt: imagePrompt,
-            negative_prompt: "text, watermark, logo, low quality, blurry, distorted, anime, cartoon, duplicate, multiple images",
-            num_outputs: 1,
-            guidance_scale: rarity === 'GOD_TIER' ? 9.5 : rarity === 'MYTHIC' ? 8.5 : 7.5,
-            num_inference_steps: rarity === 'GOD_TIER' ? 70 : rarity === 'MYTHIC' ? 60 : 50,
+            negative_prompt: "text, watermark, logo, low quality, blurry, distorted",
+            style: "photo",
             width: 768,
             height: 768,
-            refine: "expert_ensemble_refiner",
-            scheduler: "K_EULER",
-            apply_watermark: false
           }
         }
-      );
+      ) as { url: string } | string[] | string;
 
-      if (!prediction || (Array.isArray(prediction) && !prediction[0])) {
-        console.error('Replicate prediction response:', JSON.stringify(prediction, null, 2));
-        throw new Error('No image generated from Replicate');
+      console.log('Replicate output:', output);
+
+      if (output && typeof output === 'object' && 'url' in output) {
+        return output.url;
+      } else if (Array.isArray(output) && output.length > 0) {
+        return output[0];
+      } else if (typeof output === 'string') {
+        return output;
       }
 
-      return Array.isArray(prediction) ? prediction[0] : prediction.toString();
-    } catch (error: unknown) {
-      console.error('Error generating image. Full error details:', {
-        error: JSON.stringify(error, Object.getOwnPropertyNames(error as object), 2),
-        message: error instanceof Error ? error.message : 'Unknown error',
-        name: error instanceof Error ? error.name : 'Unknown error',
-        stack: error instanceof Error ? error.stack : 'Unknown stack',
-      });
-      
-      if (error && typeof error === 'object' && 'response' in error) {
-        const apiError = error as { response: { status: number; statusText: string; data: unknown; headers: unknown } };
-        console.error('Replicate API response error:', {
-          status: apiError.response.status,
-          statusText: apiError.response.statusText,
-          data: apiError.response.data,
-          headers: apiError.response.headers,
-        });
-      }
-      
-      return '/api/placeholder/400/400';
+      throw new Error('Invalid response from Replicate');
+    } catch (error) {
+      console.error('Error generating image:', error);
+      return '/images/placeholder.jpg';
     }
+  }
+
+  private async generateImagePrompt(element: ElementType, rarity: RarityType, name: string): Promise<string> {
+    const style = {
+      COMMON: "simple meme style",
+      RARE: "detailed meme artwork",
+      EPIC: "high-quality digital art",
+      LEGENDARY: "premium fantasy artwork",
+      MYTHIC: "ethereal masterpiece",
+      GOD_TIER: "divine cosmic artwork"
+    }[rarity];
+
+    const response = await this.openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [{
+        role: "user",
+        content: `Create a concise prompt for an AI image generator to create a ${style} trading card illustration for "${name}", a ${element} type card. Focus on clear visuals and ${rarity.toLowerCase()} quality.`
+      }],
+      max_tokens: 100,
+      temperature: 0.7
+    });
+
+    return response.choices[0]?.message?.content || `${style} ${element} card illustration`;
   }
 
   private async generateFlavorText(name: string, element: ElementType): Promise<string> {
