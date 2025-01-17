@@ -257,10 +257,60 @@ export class MemeCardGenerator {
     };
   }
 
+  private getWeightedRarity(): RarityType {
+    // Define probability weights for each rarity
+    const weights = {
+      COMMON: 60,     // 60% chance
+      RARE: 25,       // 25% chance
+      EPIC: 10,       // 10% chance
+      LEGENDARY: 4,   // 4% chance
+      MYTHIC: 0.9,    // 0.9% chance
+      GOD_TIER: 0.1   // 0.1% chance
+    };
+    
+    const totalWeight = Object.values(weights).reduce((sum, weight) => sum + weight, 0);
+    let random = Math.random() * totalWeight;
+    
+    for (const [rarity, weight] of Object.entries(weights)) {
+      random -= weight;
+      if (random <= 0) {
+        return rarity as RarityType;
+      }
+    }
+    
+    return 'COMMON'; // Fallback
+  }
+
+  private getElementForRarity(rarity: RarityType): ElementType {
+    // Higher rarity cards have better chance of powerful elements
+    const weights = {
+      COMMON: { WHOLESOME: 40, TOXIC: 30, DANK: 20, CURSED: 10 },
+      RARE: { WHOLESOME: 30, TOXIC: 30, DANK: 25, CURSED: 15 },
+      EPIC: { WHOLESOME: 25, TOXIC: 25, DANK: 30, CURSED: 20 },
+      LEGENDARY: { WHOLESOME: 20, TOXIC: 20, DANK: 30, CURSED: 30 },
+      MYTHIC: { WHOLESOME: 15, TOXIC: 20, DANK: 30, CURSED: 35 },
+      GOD_TIER: { WHOLESOME: 10, TOXIC: 20, DANK: 30, CURSED: 40 }
+    };
+
+    const elementWeights = weights[rarity];
+    const totalWeight = Object.values(elementWeights).reduce((sum, weight) => sum + weight, 0);
+    let random = Math.random() * totalWeight;
+    
+    for (const [element, weight] of Object.entries(elementWeights)) {
+      random -= weight;
+      if (random <= 0) {
+        return element as ElementType;
+      }
+    }
+    
+    return 'WHOLESOME'; // Fallback
+  }
+
   public async generateCard(): Promise<Card> {
     try {
-      const element = this.elements[Math.floor(Math.random() * this.elements.length)];
-      const rarity = this.rarities[Math.floor(Math.random() * this.rarities.length)];
+      const rarity = this.getWeightedRarity();
+      const element = this.getElementForRarity(rarity); 
+      
 
       const name = await this.generateCardName(element, rarity);
       const ability = await this.generateAbility(element, rarity);
