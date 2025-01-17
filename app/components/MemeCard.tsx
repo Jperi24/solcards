@@ -1,7 +1,7 @@
 // components/MemeCard.tsx
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect,useCallback } from 'react';
 import { Sword, Shield, Zap, ImageOff } from 'lucide-react';
 
 interface CardStats {
@@ -80,21 +80,58 @@ const ELEMENT_STYLES = {
     icon: "👻"
   }
 } as const;
+
+
+// ... keep all your interfaces and constants the same ...
+
 const MemeCard: React.FC<MemeCardProps> = ({ card }) => {
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
+  const [validatedImageUrl, setValidatedImageUrl] = useState<string>('/api/placeholder/400/400');
   const rarityStyle = RARITY_STYLES[card.stats.rarity];
   const elementStyle = ELEMENT_STYLES[card.stats.element];
 
+  const validateAndSetImage = useCallback(() => {
+    if (card.image_path?.startsWith('data:image/png;base64,')) {
+      // Validate base64 string
+      try {
+        const base64Data = card.image_path.split('base64,')[1];
+        if (base64Data && base64Data.length > 0) {
+          setValidatedImageUrl(card.image_path);
+          return true;
+        }
+      } catch (e) {
+        console.error('Invalid base64 data');
+      }
+    }
+    setValidatedImageUrl('/api/placeholder/400/400');
+    return false;
+  }, [card.image_path]);
+
+  // Reset states when card changes
   useEffect(() => {
-    // Reset states when card changes
     setImageError(false);
     setImageLoading(true);
-    console.log('Card image path:', card.image_path);
-  }, [card]);
+    validateAndSetImage();
+  }, [card.image_path, validateAndSetImage]);
+
+  // Handle timeout
+  useEffect(() => {
+    if (imageLoading) {
+      const timeoutId = setTimeout(() => {
+        if (imageLoading) {
+          console.log('Image load timeout');
+          setImageError(true);
+          setImageLoading(false);
+        }
+      }, 5000); // 5 second timeout
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [imageLoading]);
 
   const handleImageError = () => {
-    console.error('Failed to load image:', card.image_path);
+    console.error('Image failed to load');
     setImageError(true);
     setImageLoading(false);
   };
@@ -144,7 +181,7 @@ const MemeCard: React.FC<MemeCardProps> = ({ card }) => {
           
           {!imageError ? (
             <img
-              src={card.image_path}
+              src={validatedImageUrl}
               alt={card.name}
               className={`
                 w-full h-full object-cover transition-transform duration-300 group-hover:scale-110

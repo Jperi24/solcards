@@ -126,22 +126,72 @@ export class MemeCardGenerator {
             height: 768,
           }
         }
-      ) as { url: string } | string[] | string;
+      ) as string | ReadableStream | string[] | { url: string };
 
-      console.log('Replicate output:', output);
+      console.log('Raw Replicate output type:', typeof output);
 
-      if (output && typeof output === 'object' && 'url' in output) {
-        return output.url;
-      } else if (Array.isArray(output) && output.length > 0) {
-        return output[0];
-      } else if (typeof output === 'string') {
-        return output;
+      // Handle different response types
+      if (output instanceof ReadableStream) {
+        const reader = output.getReader();
+        const chunks: Uint8Array[] = [];
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) chunks.push(value);
+        }
+        
+        const concatenated = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0));
+        let offset = 0;
+        for (const chunk of chunks) {
+          concatenated.set(chunk, offset);
+          offset += chunk.length;
+        }
+
+        return `data:image/png;base64,${Buffer.from(concatenated).toString('base64')}`;
       }
 
-      throw new Error('Invalid response from Replicate');
+      // Handle URL responses
+      if (typeof output === 'string') {
+        if (output.startsWith('http') || output.startsWith('data:')) {
+          return output;
+        }
+        // If it's a string but not a URL, try to parse it as base64
+        try {
+          const base64Test = Buffer.from(output, 'base64').toString('base64');
+          if (base64Test) {
+            return `data:image/png;base64,${output}`;
+          }
+        } catch {
+          // Not valid base64, fall through to default
+        }
+      }
+
+      // Handle array responses
+      if (Array.isArray(output) && output.length > 0) {
+        const firstOutput = output[0];
+        if (typeof firstOutput === 'string') {
+          if (firstOutput.startsWith('http') || firstOutput.startsWith('data:')) {
+            return firstOutput;
+          }
+          try {
+            return `data:image/png;base64,${firstOutput}`;
+          } catch {
+            // Not valid base64, fall through to default
+          }
+        }
+      }
+
+      // Handle object with url
+      if (typeof output === 'object' && output !== null && 'url' in output) {
+        return output.url;
+      }
+
+      console.error('Invalid response format from Replicate:', output);
+      return '/api/placeholder/400/400';
     } catch (error) {
       console.error('Error generating image:', error);
-      return '/images/placeholder.jpg';
+      return '/api/placeholder/400/400';
     }
   }
 

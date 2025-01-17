@@ -10,6 +10,41 @@ const TestInterface = () => {
   const [generatedCards, setGeneratedCards] = useState<Card[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  const validateBase64 = (str: string) => {
+    try {
+      // Remove data URL prefix if present
+      const base64String = str.includes('base64,') 
+        ? str.split('base64,')[1] 
+        : str;
+      
+      // Test if it's a valid base64 string
+      return btoa(atob(base64String)) === base64String;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  const cleanupBase64ImagePath = (imagePath: string): string => {
+    if (!imagePath) return '/api/placeholder/400/400';
+
+    // If it's already a data URL, validate it
+    if (imagePath.startsWith('data:image')) {
+      return validateBase64(imagePath) ? imagePath : '/api/placeholder/400/400';
+    }
+
+    // If it's a bare base64 string
+    if (validateBase64(imagePath)) {
+      return `data:image/png;base64,${imagePath}`;
+    }
+
+    // If it's a URL
+    if (imagePath.startsWith('http')) {
+      return imagePath;
+    }
+
+    return '/api/placeholder/400/400';
+  };
+
   const generateCard = async () => {
     try {
       setIsGenerating(true);
@@ -29,24 +64,37 @@ const TestInterface = () => {
 
       console.log('Response status:', response.status);
       
-      // Log the raw response for debugging
+      // Get the raw text and try to parse it
       const rawText = await response.text();
-      console.log('Raw response:', rawText);
+      console.log('Raw response length:', rawText.length);
 
-      // Try to parse the response as JSON
       let data;
       try {
         data = JSON.parse(rawText);
+        console.log('Parsed data received');
+
+        // Clean up the card data
+        const cleanedCard: Card = {
+          name: data.name.replace(/^"|"$/g, ''),
+          stats: {
+            attack: Number(data.stats.attack),
+            defense: Number(data.stats.defense),
+            cost: Number(data.stats.cost),
+            element: data.stats.element,
+            rarity: data.stats.rarity,
+            ability_name: data.stats.ability_name,
+            ability_description: data.stats.ability_description
+          },
+          image_path: cleanupBase64ImagePath(data.image_path),
+          flavor_text: data.flavor_text.replace(/^"|"$/g, '')
+        };
+
+        console.log('Card prepared with image path length:', cleanedCard.image_path.length);
+        setGeneratedCards(prev => [cleanedCard, ...prev]);
       } catch (e) {
-        throw new Error(`Failed to parse JSON response: ${rawText.substring(0, 100)}...`);
+        console.error('Error parsing or processing card data:', e);
+        throw new Error(`Failed to process card data: ${e}`);
       }
-
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to generate card');
-      }
-
-      setGeneratedCards(prev => [data.card as Card, ...prev]);
-
     } catch (error) {
       console.error('Error details:', error);
       setError(error instanceof Error ? error.message : 'An error occurred');
@@ -90,7 +138,9 @@ const TestInterface = () => {
         {/* Generated Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {generatedCards.map((card, index) => (
-            <MemeCard key={index} card={card} />
+            <div key={index} className="flex justify-center">
+              <MemeCard card={card} />
+            </div>
           ))}
         </div>
       </div>
