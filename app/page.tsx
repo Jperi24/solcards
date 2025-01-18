@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Sparkles, Wallet, Info, Library, Wand2, Stars, Zap, Sword, Dices } from "lucide-react";
 import Header from "./components/header";
 import MemeCard from '@/app/components/MemeCard';
-import type { Card } from '@/app/types/cards';
+import type { Card, ElementType, RarityType } from '@/app/types/cards';
 
 const NFTRedemption = () => {
   const [connected, setConnected] = useState(false);
@@ -76,10 +76,13 @@ const NFTRedemption = () => {
           attack: Number(data.stats.attack),
           defense: Number(data.stats.defense),
           cost: Number(data.stats.cost),
-          element: data.stats.element,
-          rarity: data.stats.rarity,
+          element: data.stats.element as ElementType,
+          rarity: data.stats.rarity as RarityType,
           ability_name: data.stats.ability_name,
-          ability_description: data.stats.ability_description
+          ability_description: data.stats.ability_description,
+          ability_type: data.stats.ability_type,
+          effect: data.stats.effect,
+          limitation: data.stats.limitation
         },
         image_path: data.image_path,
         flavor_text: data.flavor_text.replace(/^"|"$/g, '')

@@ -2,20 +2,6 @@ import OpenAI from 'openai';
 import Replicate from 'replicate';
 import type { Card, ElementType, RarityType } from '@/app/types/cards';
 
-type AbilityType = 'ENTER_BATTLEFIELD' | 'ATTACK_TRIGGER' | 'DEATH_TRIGGER' | 'PASSIVE';
-type EffectType = 'DAMAGE' | 'HEAL' | 'BUFF' | 'DEBUFF' | 'DRAW';
-
-interface StructuredAbility {
-  name: string;
-  type: AbilityType;
-  effect: {
-    type: EffectType;
-    value: number;
-    target: string;
-  };
-  limitation: string;
-}
-
 export class MemeCardGenerator {
   private openai: OpenAI;
   private replicate: Replicate;
@@ -82,136 +68,46 @@ export class MemeCardGenerator {
     }
   }
 
-  private async generateAbility(element: ElementType, rarity: RarityType): Promise<{ 
-    name: string; 
-    description: string;
-    type: AbilityType;
-    effect: {
-      type: EffectType;
-      value: number;
-      target: string;
-    };
-    limitation: string;
-  }> {
-    const abilityStructure = await this.generateStructuredAbility(element, rarity);
-    
-    return {
-      name: abilityStructure.name,
-      description: this.formatAbilityDescription(abilityStructure),
-      type: abilityStructure.type,
-      effect: abilityStructure.effect,
-      limitation: abilityStructure.limitation
-    };
-  }
-  
-  private async generateStructuredAbility(element: ElementType, rarity: RarityType): Promise<StructuredAbility> {
-    let attempts = 0;
-    let ability: StructuredAbility;
-    
-    do {
-      const powerScale = {
-        COMMON: { min: 1, max: 2, types: ['PASSIVE', 'ENTER_BATTLEFIELD'] },
-        RARE: { min: 2, max: 3, types: ['PASSIVE', 'ENTER_BATTLEFIELD', 'ATTACK_TRIGGER'] },
-        EPIC: { min: 3, max: 4, types: ['ENTER_BATTLEFIELD', 'ATTACK_TRIGGER', 'DEATH_TRIGGER'] },
-        LEGENDARY: { min: 4, max: 5, types: ['ATTACK_TRIGGER', 'DEATH_TRIGGER', 'PASSIVE'] },
-        MYTHIC: { min: 5, max: 6, types: ['ENTER_BATTLEFIELD', 'ATTACK_TRIGGER', 'DEATH_TRIGGER'] },
-        GOD_TIER: { min: 6, max: 8, types: ['ENTER_BATTLEFIELD', 'ATTACK_TRIGGER', 'DEATH_TRIGGER'] }
+  private async generateAbility(element: ElementType, rarity: RarityType): Promise<{ name: string; description: string }> {
+    try {
+      const powerLevel = {
+        COMMON: "basic",
+        RARE: "moderate",
+        EPIC: "powerful",
+        LEGENDARY: "very powerful",
+        MYTHIC: "extremely powerful",
+        GOD_TIER: "game-changing"
       }[rarity];
-    
-      const elementEffects = {
-        WHOLESOME: ['HEAL', 'BUFF'],
-        TOXIC: ['DAMAGE', 'DEBUFF'],
-        DANK: ['DAMAGE', 'DRAW'],
-        CURSED: ['DEBUFF', 'DAMAGE']
-      }[element] as EffectType[];
-    
-      const abilityType = powerScale.types[Math.floor(Math.random() * powerScale.types.length)] as AbilityType;
-      const effectType = elementEffects[Math.floor(Math.random() * elementEffects.length)];
-      const value = Math.floor(Math.random() * (powerScale.max - powerScale.min + 1)) + powerScale.min;
-      const limitation = this.generateLimitation(rarity, value);
-    
-      const prompt = `Create a meme-themed ability name for a ${rarity} ${element} card with ${abilityType} type effect.
-        The ability does ${effectType} ${value} to target.
-        Keep it short and reference internet culture.
-        Format: Name: [2-3 words only]`;
-    
+
+      const prompt = `Create a ${powerLevel} ability for a ${element.toLowerCase()} meme-themed trading card.
+        Format:
+        Name: [short, catchy name]
+        Description: [brief ability description, max 15 words]
+        
+        Make it meme-related and reference internet culture.`;
+
       const response = await this.openai.chat.completions.create({
         model: "gpt-3.5-turbo",
         messages: [
-          { role: "system", content: "You are a meme card ability name generator." },
+          { role: "system", content: "You are a creative meme card ability generator." },
           { role: "user", content: prompt }
         ],
-        max_tokens: 50,
+        max_tokens: 100,
         temperature: 0.7
       });
-    
-      ability = {
-        name: response.choices[0]?.message?.content?.replace('Name: ', '').trim() || "Mystery Ability",
-        type: abilityType,
-        effect: {
-          type: effectType,
-          value,
-          target: this.getAbilityTarget(effectType)
-        },
-        limitation
-      };
-      
-      attempts++;
-    } while (!this.validateAbilityBalance(ability, rarity) && attempts < 3);
 
-    // If we still couldn't generate a balanced ability, force the values to be valid
-    if (!this.validateAbilityBalance(ability, rarity)) {
-      const maxValues = {
-        DAMAGE: { COMMON: 2, RARE: 3, EPIC: 4, LEGENDARY: 5, MYTHIC: 6, GOD_TIER: 8 },
-        HEAL: { COMMON: 3, RARE: 4, EPIC: 5, LEGENDARY: 6, MYTHIC: 7, GOD_TIER: 9 },
-        BUFF: { COMMON: 2, RARE: 3, EPIC: 4, LEGENDARY: 5, MYTHIC: 6, GOD_TIER: 7 },
-        DEBUFF: { COMMON: 2, RARE: 3, EPIC: 4, LEGENDARY: 5, MYTHIC: 6, GOD_TIER: 7 },
-        DRAW: { COMMON: 1, RARE: 1, EPIC: 2, LEGENDARY: 2, MYTHIC: 3, GOD_TIER: 3 }
+      const content = response.choices[0]?.message?.content || "";
+      const name = content.match(/Name: (.*)/)?.[1] || "Mystery Ability";
+      const description = content.match(/Description: (.*)/)?.[1] || "Does something mysterious";
+
+      return { name, description };
+    } catch (error) {
+      console.error('Error generating ability:', error);
+      return {
+        name: "Basic Ability",
+        description: `${element} power of ${rarity} strength`
       };
-      
-      ability.effect.value = maxValues[ability.effect.type][rarity];
     }
-
-    return ability;
-  }
-  
-  private generateLimitation(rarity: RarityType, value: number): string {
-    const limitations = {
-      COMMON: 'once per turn',
-      RARE: value > 3 ? 'once per turn' : 'twice per turn',
-      EPIC: value > 4 ? 'once per turn' : 'costs 1 mana',
-      LEGENDARY: 'costs 2 mana',
-      MYTHIC: 'once per game',
-      GOD_TIER: 'costs 3 mana'
-    };
-    return limitations[rarity];
-  }
-  
-  private getAbilityTarget(effectType: EffectType): string {
-    const targets = {
-      DAMAGE: 'opponent or their card',
-      HEAL: 'your cards or yourself',
-      BUFF: 'your cards',
-      DEBUFF: 'opponent\'s cards',
-      DRAW: 'you'
-    };
-    return targets[effectType];
-  }
-  
-  private formatAbilityDescription(ability: StructuredAbility): string {
-    return `${ability.type}: ${ability.effect.type} ${ability.effect.value} to ${ability.effect.target}. ${ability.limitation}.`;
-  }
-
-  private validateAbilityBalance(ability: StructuredAbility, rarity: RarityType): boolean {
-    const maxValues = {
-      DAMAGE: { COMMON: 2, RARE: 3, EPIC: 4, LEGENDARY: 5, MYTHIC: 6, GOD_TIER: 8 },
-      HEAL: { COMMON: 3, RARE: 4, EPIC: 5, LEGENDARY: 6, MYTHIC: 7, GOD_TIER: 9 },
-      BUFF: { COMMON: 2, RARE: 3, EPIC: 4, LEGENDARY: 5, MYTHIC: 6, GOD_TIER: 7 },
-      DEBUFF: { COMMON: 2, RARE: 3, EPIC: 4, LEGENDARY: 5, MYTHIC: 6, GOD_TIER: 7 },
-      DRAW: { COMMON: 1, RARE: 1, EPIC: 2, LEGENDARY: 2, MYTHIC: 3, GOD_TIER: 3 }
-    };
-  
-    return ability.effect.value <= maxValues[ability.effect.type][rarity];
   }
 
   private async generateImage(element: ElementType, rarity: RarityType, name: string): Promise<string> {
@@ -232,6 +128,9 @@ export class MemeCardGenerator {
         }
       ) as string | ReadableStream | string[] | { url: string };
 
+      console.log('Raw Replicate output type:', typeof output);
+
+      // Handle different response types
       if (output instanceof ReadableStream) {
         const reader = output.getReader();
         const chunks: Uint8Array[] = [];
@@ -252,10 +151,12 @@ export class MemeCardGenerator {
         return `data:image/png;base64,${Buffer.from(concatenated).toString('base64')}`;
       }
 
+      // Handle URL responses
       if (typeof output === 'string') {
         if (output.startsWith('http') || output.startsWith('data:')) {
           return output;
         }
+        // If it's a string but not a URL, try to parse it as base64
         try {
           const base64Test = Buffer.from(output, 'base64').toString('base64');
           if (base64Test) {
@@ -266,21 +167,27 @@ export class MemeCardGenerator {
         }
       }
 
-      if (Array.isArray(output) && output.length > 0 && typeof output[0] === 'string') {
-        if (output[0].startsWith('http') || output[0].startsWith('data:')) {
-          return output[0];
-        }
-        try {
-          return `data:image/png;base64,${output[0]}`;
-        } catch {
-          // Not valid base64, fall through to default
+      // Handle array responses
+      if (Array.isArray(output) && output.length > 0) {
+        const firstOutput = output[0];
+        if (typeof firstOutput === 'string') {
+          if (firstOutput.startsWith('http') || firstOutput.startsWith('data:')) {
+            return firstOutput;
+          }
+          try {
+            return `data:image/png;base64,${firstOutput}`;
+          } catch {
+            // Not valid base64, fall through to default
+          }
         }
       }
 
+      // Handle object with url
       if (typeof output === 'object' && output !== null && 'url' in output) {
         return output.url;
       }
 
+      console.error('Invalid response format from Replicate:', output);
       return '/api/placeholder/400/400';
     } catch (error) {
       console.error('Error generating image:', error);
@@ -317,7 +224,8 @@ export class MemeCardGenerator {
         Make it reference internet culture and memes. Keep it under 10 words.`;
 
       const response = await this.openai.chat.completions.create({
-        model: "gpt-3.5-turbo",messages: [
+        model: "gpt-3.5-turbo",
+        messages: [
           { role: "system", content: "You are a creative meme card flavor text generator." },
           { role: "user", content: prompt }
         ],
@@ -332,40 +240,25 @@ export class MemeCardGenerator {
     }
   }
 
-  private generateStats(element: ElementType, rarity: RarityType): { attack: number; defense: number; cost: number } {
-    const statPoints = {
-      COMMON: 8,
-      RARE: 10,
-      EPIC: 12,
-      LEGENDARY: 14,
-      MYTHIC: 16,
-      GOD_TIER: 18
+  private generateStats(rarity: RarityType): { attack: number; defense: number; cost: number } {
+    const baseStats = {
+      COMMON: { min: 1, max: 5 },
+      RARE: { min: 3, max: 7 },
+      EPIC: { min: 5, max: 8 },
+      LEGENDARY: { min: 7, max: 9 },
+      MYTHIC: { min: 8, max: 10 },
+      GOD_TIER: { min: 9, max: 12 }
     }[rarity];
-  
-    const elementBias = {
-      WHOLESOME: { attack: 0.3, defense: 0.7 },
-      TOXIC: { attack: 0.6, defense: 0.4 },
-      DANK: { attack: 0.7, defense: 0.3 },
-      CURSED: { attack: 0.5, defense: 0.5 }
-    }[element];
-  
-    // Base stats with element bias
-    const baseAttack = Math.ceil(statPoints * elementBias.attack);
-    const baseDefense = Math.ceil(statPoints * elementBias.defense);
-  
-    // Add small random variation but maintain total power level
-    const variation = Math.floor(Math.random() * 3) - 1;
-    const attack = Math.max(1, baseAttack + variation);
-    const defense = Math.max(1, baseDefense - variation);
-  
-    // Cost calculation based on total power and rarity
-    const powerLevel = attack + defense;
-    const cost = Math.max(1, Math.min(10, Math.ceil(powerLevel / 3)));
-  
-    return { attack, defense, cost };
+
+    return {
+      attack: Math.floor(Math.random() * (baseStats.max - baseStats.min + 1)) + baseStats.min,
+      defense: Math.floor(Math.random() * (baseStats.max - baseStats.min + 1)) + baseStats.min,
+      cost: Math.floor((baseStats.min + baseStats.max) / 3)
+    };
   }
 
   private getWeightedRarity(): RarityType {
+    // Define probability weights for each rarity
     const weights = {
       COMMON: 60,     // 60% chance
       RARE: 25,       // 25% chance
@@ -389,6 +282,7 @@ export class MemeCardGenerator {
   }
 
   private getElementForRarity(rarity: RarityType): ElementType {
+    // Higher rarity cards have better chance of powerful elements
     const weights = {
       COMMON: { WHOLESOME: 40, TOXIC: 30, DANK: 20, CURSED: 10 },
       RARE: { WHOLESOME: 30, TOXIC: 30, DANK: 25, CURSED: 15 },
@@ -416,12 +310,11 @@ export class MemeCardGenerator {
     try {
       const rarity = this.getWeightedRarity();
       const element = this.getElementForRarity(rarity); 
+      
+
       const name = await this.generateCardName(element, rarity);
-      const stats = this.generateStats(element, rarity);
-      
-      // Get full structured ability
       const ability = await this.generateAbility(element, rarity);
-      
+      const stats = this.generateStats(rarity);
       const image_path = await this.generateImage(element, rarity, name);
       const flavor_text = await this.generateFlavorText(name, element);
 
@@ -432,10 +325,7 @@ export class MemeCardGenerator {
           element,
           rarity,
           ability_name: ability.name,
-          ability_description: ability.description,
-          ability_type: ability.type,
-          effect: ability.effect,
-          limitation: ability.limitation
+          ability_description: ability.description
         },
         image_path,
         flavor_text

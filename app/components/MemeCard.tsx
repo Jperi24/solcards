@@ -92,21 +92,32 @@ const MemeCard: React.FC<MemeCardProps> = ({ card }) => {
   const elementStyle = ELEMENT_STYLES[card.stats.element];
 
   const validateAndSetImage = useCallback(() => {
-    if (card.image_path?.startsWith('data:image/png;base64,')) {
-      // Validate base64 string
-      try {
-        const base64Data = card.image_path.split('base64,')[1];
-        if (base64Data && base64Data.length > 0) {
-          setValidatedImageUrl(card.image_path);
-          return true;
+    if (card.image_path?.startsWith('data:image/png;base64,') || card.image_path?.startsWith('/card-images')) {
+      // Check if the image is a base64 string
+      if (card.image_path.startsWith('data:image/png;base64,')) {
+        try {
+          const base64Data = card.image_path.split('base64,')[1];
+          if (base64Data && base64Data.length > 0) {
+            setValidatedImageUrl(card.image_path);
+            return true;
+          }
+        } catch (e) {
+          console.error('Invalid base64 data');
         }
-      } catch (e) {
-        console.error('Invalid base64 data');
+      }
+  
+      // Handle case for public directory images (relative path)
+      if (card.image_path.startsWith('/card-images')) {
+        // Assuming the image path is valid and the image exists in public/card-images
+        setValidatedImageUrl(card.image_path);
+        return true;
       }
     }
+  
     setValidatedImageUrl('/api/placeholder/400/400');
     return false;
   }, [card.image_path]);
+  
 
   // Reset states when card changes
   useEffect(() => {
@@ -124,7 +135,7 @@ const MemeCard: React.FC<MemeCardProps> = ({ card }) => {
           setImageError(true);
           setImageLoading(false);
         }
-      }, 5000); // 5 second timeout
+      }, 10000); // 5 second timeout
 
       return () => clearTimeout(timeoutId);
     }
