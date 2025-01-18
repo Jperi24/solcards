@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sparkles, Wallet, Swords, ShoppingCart, User  } from "lucide-react";
+import { Sparkles, Wallet, Swords, ShoppingCart, Backpack, Lightbulb } from "lucide-react";
 
 const Header = () => {
   const pathname = usePathname();
@@ -38,7 +38,7 @@ const Header = () => {
                 }`}
             >
               <Sparkles className="w-4 h-4" />
-              <span>Mint</span>
+              <span>Summon</span>
             </Link>
             
             <Link
@@ -63,7 +63,7 @@ const Header = () => {
                     : "text-gray-300 hover:text-white hover:bg-white/5"
                 }`}
             >
-              <User className="w-4 h-4" />
+              <Lightbulb className="w-4 h-4" />
               <span>How To Play</span>
             </Link>
 
@@ -89,6 +89,7 @@ const Header = () => {
                     : "text-gray-300 hover:text-white hover:bg-white/5"
                 }`}
             >
+              <Backpack className="w-4 h-4" />
               <span>Collection</span>
             </Link>
 

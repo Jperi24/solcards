@@ -71,7 +71,7 @@ const TutorialBattle = () => {
     },
     {
       title: "Element Advantages",
-      description: "Elements strong against others deal 50% more damage! Check the element chart above.",
+      description: "Elements strong against others deal 50% more damage!",
       animation: "elements"
     },
     {
@@ -167,8 +167,8 @@ const TutorialBattle = () => {
   };
 
   return (
-    <div className="bg-white/5 rounded-xl p-6 mb-8">
-      <h2 className="text-2xl font-bold text-white mb-4">Interactive Tutorial</h2>
+    <div className="bg-white/5 rounded-xl p-4 mb-6">
+      <h2 className="text-2xl font-bold text-white mb-3">Interactive Tutorial</h2>
       
       {/* Tutorial Controls */}
       <div className="flex justify-between items-center mb-4">
