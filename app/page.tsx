@@ -6,6 +6,7 @@ import MemeCard from '@/app/components/MemeCard';
 import type { Card, ElementType, RarityType } from '@/app/types/cards';
 
 const NFTRedemption = () => {
+  
   const [connected, setConnected] = useState(false);
   const [tokens, setTokens] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
