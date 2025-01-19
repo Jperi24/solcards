@@ -14,6 +14,18 @@
 /coverage
 
 
+# Ignore the file SAFEMemeCardGen.tsx in app/lib
+app/lib/SAFEMemeCardGen.tsx
+
+
+
+# Ignore everything in the app/test directory
+app/test/
+
+# Ignore the file SafeCards.ts in app/types
+app/types/SafeCards.ts
+
+
 
 # next.js
 /.next/

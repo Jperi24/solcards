@@ -27,7 +27,7 @@ const TutorialBattle = () => {
       effect: {
         type: "DAMAGE" as EffectType,
         value: 2,
-        target: "opponent"
+        target: "OPPONENT"
       },
       limitation: "once per turn"
     },
@@ -50,7 +50,7 @@ const TutorialBattle = () => {
       effect: {
         type: "HEAL" as EffectType,
         value: 1,
-        target: "your cards"
+        target: "SELF"
       },
       limitation: "once per turn"
     },
