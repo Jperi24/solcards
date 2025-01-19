@@ -2,18 +2,61 @@ import OpenAI from 'openai';
 import Replicate from 'replicate';
 import type { Card, ElementType, RarityType } from '@/app/types/cards';
 
-type AbilityType = 'ENTER_BATTLEFIELD' | 'ATTACK_TRIGGER' | 'DEATH_TRIGGER' | 'PASSIVE';
-type EffectType = 'DAMAGE' | 'HEAL' | 'BUFF' | 'DEBUFF' | 'DRAW';
+type AbilityType = 'ENTER_BATTLEFIELD' | 'ATTACK_TRIGGER' | 'DEATH_TRIGGER' | 'PASSIVE' | 'ACTIVATED';
+type EffectType = 'DAMAGE' | 'HEAL' | 'BUFF' | 'DEBUFF' | 'DRAW' | 'COPY' | 'TRANSFORM' | 'SUMMON' | 'BOUNCE' | 'MILL';
+type Target = 'SELF' | 'OPPONENT' | 'ALL_CARDS' | 'OWN_CARDS' | 'OPPONENT_CARDS' | 'RANDOM_CARD' | 'CHOSEN_CARD';
+type Condition = 'NONE' | 'HP_BELOW_50' | 'HAND_EMPTY' | 'BOARD_FULL' | 'ELEMENT_MATCH' | 'COMBO';
+
+// First, define our effect template types
+type EffectTemplate = 
+  | { type: 'DAMAGE'; target: Target }
+  | { type: 'HEAL'; target: Target }
+  | { type: 'BUFF'; metadata: { stat: 'ATTACK' | 'DEFENSE' | 'BOTH'; duration: number }; target?: Target }
+  | { type: 'DEBUFF'; metadata: { stat: 'ATTACK' | 'DEFENSE' | 'BOTH'; duration: number }; target?: Target }
+  | { type: 'DRAW' };
+
+interface ElementSynergyConfig {
+  primaryEffects: EffectTemplate[];
+  synergies: EffectTemplate[];
+  conditions: Condition[];
+}
+
+// Add after your existing type definitions
+interface StatEffect {
+  stat: 'ATTACK' | 'DEFENSE' | 'BOTH';
+  value: number;
+  duration: number; // Number of turns
+}
+
+// Add to your AbilityEffect interface
+interface AbilityEffect {
+  type: EffectType;
+  value: number;
+  target: Target;
+  duration?: number;
+  condition?: Condition;
+  metadata?: {
+    stat?: 'ATTACK' | 'DEFENSE' | 'BOTH';
+    duration?: number;
+  };
+}
+
+interface AbilityEffect {
+  type: EffectType;
+  value: number;
+  target: Target;
+  duration?: number;
+  condition?: Condition;
+}
 
 interface StructuredAbility {
   name: string;
   type: AbilityType;
-  effect: {
-    type: EffectType;
-    value: number;
-    target: string;
-  };
+  effects: AbilityEffect[];
+  cost?: number;
+  cooldown?: number;
   limitation: string;
+  combo?: string;
 }
 
 export class MemeCardGenerator {
@@ -23,6 +66,164 @@ export class MemeCardGenerator {
   private readonly elements: ElementType[] = ['WHOLESOME', 'TOXIC', 'DANK', 'CURSED'];
   private readonly rarities: RarityType[] = ['COMMON', 'RARE', 'EPIC', 'LEGENDARY', 'MYTHIC', 'GOD_TIER'];
 
+
+
+private readonly ELEMENT_SYNERGIES: Record<ElementType, ElementSynergyConfig> = {
+    WHOLESOME: {
+      primaryEffects: [
+        { type: 'HEAL', target: 'SELF' },
+        { type: 'BUFF', metadata: { stat: 'DEFENSE', duration: 2 }, target: 'OWN_CARDS' }
+      ],
+      synergies: [
+        { type: 'DRAW' },
+        { type: 'BUFF', metadata: { stat: 'BOTH', duration: 1 }, target: 'OWN_CARDS' }
+      ],
+      conditions: ['HP_BELOW_50', 'ELEMENT_MATCH']
+    },
+    TOXIC: {
+      primaryEffects: [
+        { type: 'DAMAGE', target: 'OPPONENT' },
+        { type: 'DEBUFF', metadata: { stat: 'ATTACK', duration: 2 }, target: 'OPPONENT_CARDS' }
+      ],
+      synergies: [
+        { type: 'DEBUFF', metadata: { stat: 'BOTH', duration: 1 }, target: 'OPPONENT_CARDS' },
+        { type: 'DAMAGE', target: 'OPPONENT_CARDS' }
+      ],
+      conditions: ['BOARD_FULL', 'COMBO']
+    },
+    DANK: {
+      primaryEffects: [
+        { type: 'DAMAGE', target: 'OPPONENT' },
+        { type: 'BUFF', metadata: { stat: 'ATTACK', duration: 1 }, target: 'OWN_CARDS' }
+      ],
+      synergies: [
+        { type: 'DRAW' },
+        { type: 'DAMAGE', target: 'OPPONENT_CARDS' }
+      ],
+      conditions: ['HAND_EMPTY', 'COMBO']
+    },
+    CURSED: {
+      primaryEffects: [
+        { type: 'DEBUFF', metadata: { stat: 'BOTH', duration: 2 }, target: 'OPPONENT_CARDS' },
+        { type: 'DAMAGE', target: 'OPPONENT' }
+      ],
+      synergies: [
+        { type: 'DEBUFF', metadata: { stat: 'DEFENSE', duration: 2 }, target: 'OPPONENT_CARDS' },
+        { type: 'DAMAGE', target: 'OPPONENT_CARDS' }
+      ],
+      conditions: ['ELEMENT_MATCH', 'HP_BELOW_50']
+    }
+  } as const;
+
+
+
+  private readonly IMAGE_MODELS = {
+    BASIC: {
+      model: "stability-ai/sdxl",
+      version: "a00d0b7dcbb9c3fbb34ba87d2d5b46c56969c84a628bf778a7fdaec30b1b99c5",
+      config: {
+        width: 768,
+        height: 768,
+        num_inference_steps: 25,
+        guidance_scale: 7.5
+      }
+    },
+    ENHANCED: {
+      model: "stability-ai/sdxl",  // Using SDXL with better settings for enhanced
+      version: "a00d0b7dcbb9c3fbb34ba87d2d5b46c56969c84a628bf778a7fdaec30b1b99c5",
+      config: {
+        width: 1024,
+        height: 1024,
+        num_inference_steps: 40,
+        guidance_scale: 8.5,
+        negative_prompt: "blurry, low quality, text, watermark"
+      }
+    },
+    PREMIUM: {
+      model: "stability-ai/stable-diffusion-xl-base-1.0",
+      version: "7ccae3a26a62f5a6c89fb3184793d8df5c6ecd9b20def186d508c69d6232502b",
+      config: {
+        width: 1024,
+        height: 1024,
+        num_inference_steps: 50,
+        guidance_scale: 9.0,
+        negative_prompt: "blurry, low quality, text, watermark, simple",
+        scheduler: "K_EULER"
+      }
+    },
+    DIVINE: {
+      model: "stability-ai/sdxl-base-1.0",
+      version: "7ccae3a26a62f5a6c89fb3184793d8df5c6ecd9b20def186d508c69d6232502b",
+      config: {
+        width: 1536,
+        height: 1536,
+        num_inference_steps: 75,
+        guidance_scale: 12.0,
+        negative_prompt: "blurry, low quality, text, watermark, simple, basic",
+        scheduler: "DPMSolverMultistep",
+        num_outputs: 1
+      }
+    }
+  } as const;
+
+  private readonly ABILITY_CONFIGS: Record<RarityType, {
+    maxEffects: number;
+    maxValue: number;
+    allowedTypes: AbilityType[];
+    allowedEffects: EffectType[];  // Updated to include all effect types
+    allowedTargets: Target[];
+    costRange: { min: number; max: number };
+  }> = {
+    COMMON: {
+      maxEffects: 1,
+      maxValue: 2,
+      allowedTypes: ['ENTER_BATTLEFIELD', 'PASSIVE'],
+      allowedEffects: ['DAMAGE', 'HEAL', 'BUFF', 'DEBUFF', 'DRAW'],
+      allowedTargets: ['SELF', 'OPPONENT', 'OWN_CARDS', 'OPPONENT_CARDS'],
+      costRange: { min: 1, max: 2 }
+    },
+    RARE: {
+      maxEffects: 2,
+      maxValue: 3,
+      allowedTypes: ['ENTER_BATTLEFIELD', 'PASSIVE', 'ATTACK_TRIGGER'],
+      allowedEffects: ['DAMAGE', 'HEAL', 'BUFF', 'DEBUFF', 'DRAW'],
+      allowedTargets: ['SELF', 'OPPONENT', 'OWN_CARDS', 'OPPONENT_CARDS', 'RANDOM_CARD'],
+      costRange: { min: 2, max: 3 }
+    },
+    EPIC: {
+      maxEffects: 2,
+      maxValue: 4,
+      allowedTypes: ['ENTER_BATTLEFIELD', 'ATTACK_TRIGGER', 'DEATH_TRIGGER', 'PASSIVE'],
+      allowedEffects: ['DAMAGE', 'HEAL', 'BUFF', 'DEBUFF', 'DRAW'],
+      allowedTargets: ['SELF', 'OPPONENT', 'ALL_CARDS', 'OWN_CARDS', 'OPPONENT_CARDS', 'CHOSEN_CARD'],
+      costRange: { min: 2, max: 4 }
+    },
+    LEGENDARY: {
+      maxEffects: 3,
+      maxValue: 5,
+      allowedTypes: ['ENTER_BATTLEFIELD', 'ATTACK_TRIGGER', 'DEATH_TRIGGER', 'PASSIVE'],
+      allowedEffects: ['DAMAGE', 'HEAL', 'BUFF', 'DEBUFF', 'DRAW'],
+      allowedTargets: ['SELF', 'OPPONENT', 'ALL_CARDS', 'OWN_CARDS', 'OPPONENT_CARDS', 'CHOSEN_CARD'],
+      costRange: { min: 3, max: 5 }
+    },
+    MYTHIC: {
+      maxEffects: 3,
+      maxValue: 6,
+      allowedTypes: ['ENTER_BATTLEFIELD', 'ATTACK_TRIGGER', 'DEATH_TRIGGER', 'PASSIVE'],
+      allowedEffects: ['DAMAGE', 'HEAL', 'BUFF', 'DEBUFF', 'DRAW'],
+      allowedTargets: ['SELF', 'OPPONENT', 'ALL_CARDS', 'OWN_CARDS', 'OPPONENT_CARDS', 'CHOSEN_CARD'],
+      costRange: { min: 4, max: 6 }
+    },
+    GOD_TIER: {
+      maxEffects: 4,
+      maxValue: 8,
+      allowedTypes: ['ENTER_BATTLEFIELD', 'ATTACK_TRIGGER', 'DEATH_TRIGGER', 'PASSIVE'],
+      allowedEffects: ['DAMAGE', 'HEAL', 'BUFF', 'DEBUFF', 'DRAW'],
+      allowedTargets: ['SELF', 'OPPONENT', 'ALL_CARDS', 'OWN_CARDS', 'OPPONENT_CARDS', 'CHOSEN_CARD'],
+      costRange: { min: 5, max: 8 }
+    }
+  } as const;
+
   constructor(openaiApiKey: string, replicateApiKey: string) {
     if (!openaiApiKey) throw new Error('OpenAI API key is required');
     if (!replicateApiKey) throw new Error('Replicate API key is required');
@@ -31,6 +232,7 @@ export class MemeCardGenerator {
     this.replicate = new Replicate({ auth: replicateApiKey });
   }
 
+  // Keep existing connection test method
   public async testConnections(): Promise<{ openai: boolean; replicate: boolean }> {
     const results = { openai: false, replicate: false };
     
@@ -60,6 +262,7 @@ export class MemeCardGenerator {
     return results;
   }
 
+  // Keep existing card name generation method
   private async generateCardName(element: ElementType, rarity: RarityType): Promise<string> {
     try {
       const prompt = `Generate a creative and funny name for a ${rarity.toLowerCase()} ${element.toLowerCase()} meme card. 
@@ -82,210 +285,221 @@ export class MemeCardGenerator {
     }
   }
 
-  private async generateAbility(element: ElementType, rarity: RarityType): Promise<{ 
-    name: string; 
-    description: string;
-    type: AbilityType;
-    effect: {
-      type: EffectType;
-      value: number;
-      target: string;
+  private async generateAbility(element: ElementType, rarity: RarityType): Promise<StructuredAbility> {
+    const config = this.ABILITY_CONFIGS[rarity];
+    const elementConfig = this.ELEMENT_SYNERGIES[element];
+    
+    // Determine number of effects based on rarity
+    const numEffects = Math.floor(Math.random() * config.maxEffects) + 1;
+    
+    // Helper function to get a random target
+    const getRandomTarget = (): Target => {
+      return config.allowedTargets[Math.floor(Math.random() * config.allowedTargets.length)];
     };
-    limitation: string;
-  }> {
-    const abilityStructure = await this.generateStructuredAbility(element, rarity);
-    
-    return {
-      name: abilityStructure.name,
-      description: this.formatAbilityDescription(abilityStructure),
-      type: abilityStructure.type,
-      effect: abilityStructure.effect,
-      limitation: abilityStructure.limitation
+
+    // Helper function to check if effect is allowed
+    const isEffectAllowed = (effectType: EffectType): boolean => {
+      return config.allowedEffects.includes(effectType as any);
     };
-  }
-  
-  private async generateStructuredAbility(element: ElementType, rarity: RarityType): Promise<StructuredAbility> {
-    let attempts = 0;
-    let ability: StructuredAbility;
     
-    do {
-      const powerScale = {
-        COMMON: { min: 1, max: 2, types: ['PASSIVE', 'ENTER_BATTLEFIELD'] },
-        RARE: { min: 2, max: 3, types: ['PASSIVE', 'ENTER_BATTLEFIELD', 'ATTACK_TRIGGER'] },
-        EPIC: { min: 3, max: 4, types: ['ENTER_BATTLEFIELD', 'ATTACK_TRIGGER', 'DEATH_TRIGGER'] },
-        LEGENDARY: { min: 4, max: 5, types: ['ATTACK_TRIGGER', 'DEATH_TRIGGER', 'PASSIVE'] },
-        MYTHIC: { min: 5, max: 6, types: ['ENTER_BATTLEFIELD', 'ATTACK_TRIGGER', 'DEATH_TRIGGER'] },
-        GOD_TIER: { min: 6, max: 8, types: ['ENTER_BATTLEFIELD', 'ATTACK_TRIGGER', 'DEATH_TRIGGER'] }
-      }[rarity];
+    // Generate primary effect
+    const primaryEffectTemplate = elementConfig.primaryEffects[
+      Math.floor(Math.random() * elementConfig.primaryEffects.length)
+    ];
     
-      const elementEffects = {
-        WHOLESOME: ['HEAL', 'BUFF'],
-        TOXIC: ['DAMAGE', 'DEBUFF'],
-        DANK: ['DAMAGE', 'DRAW'],
-        CURSED: ['DEBUFF', 'DAMAGE']
-      }[element] as EffectType[];
+    const effects: AbilityEffect[] = [{
+      type: primaryEffectTemplate.type,
+      value: Math.floor(Math.random() * config.maxValue) + 1,
+      target: ('target' in primaryEffectTemplate && primaryEffectTemplate.target) 
+        ? primaryEffectTemplate.target 
+        : getRandomTarget(),
+      condition: elementConfig.conditions[Math.floor(Math.random() * elementConfig.conditions.length)],
+      metadata: 'metadata' in primaryEffectTemplate ? primaryEffectTemplate.metadata : undefined
+    }];
     
-      const abilityType = powerScale.types[Math.floor(Math.random() * powerScale.types.length)] as AbilityType;
-      const effectType = elementEffects[Math.floor(Math.random() * elementEffects.length)];
-      const value = Math.floor(Math.random() * (powerScale.max - powerScale.min + 1)) + powerScale.min;
-      const limitation = this.generateLimitation(rarity, value);
+    // Add additional effects if allowed
+    for (let i = 1; i < numEffects; i++) {
+      const synergyTemplate = elementConfig.synergies[
+        Math.floor(Math.random() * elementConfig.synergies.length)
+      ];
+      
+      if (isEffectAllowed(synergyTemplate.type)) {
+        effects.push({
+          type: synergyTemplate.type,
+          value: Math.floor(Math.random() * (config.maxValue - 1)) + 1,
+          target: ('target' in synergyTemplate && synergyTemplate.target) 
+            ? synergyTemplate.target 
+            : getRandomTarget(),
+          metadata: 'metadata' in synergyTemplate ? synergyTemplate.metadata : undefined
+        });
+      }
+    }
     
-      const prompt = `Create a meme-themed ability name for a ${rarity} ${element} card with ${abilityType} type effect.
-        The ability does ${effectType} ${value} to target.
-        Keep it short and reference internet culture.
-        Format: Name: [2-3 words only]`;
+    // Rest of the function remains the same...
     
+    // Calculate appropriate cost and cooldown
+    const totalPower = effects.reduce((sum, effect) => sum + effect.value, 0);
+    const cost = Math.max(
+      config.costRange.min,
+      Math.min(config.costRange.max, Math.ceil(totalPower / 2))
+    );
+    
+    const abilityType = config.allowedTypes[Math.floor(Math.random() * config.allowedTypes.length)] as AbilityType;
+    
+    const ability: StructuredAbility = {
+      name: await this.generateAbilityName(effects, element),
+      type: abilityType,
+      effects,
+      cost,
+      limitation: this.generateLimitation(rarity, totalPower)
+    };
+    
+    // Add cooldown for activated abilities
+    if (ability.type === 'ACTIVATED') {
+      ability.cooldown = Math.ceil(totalPower / 3);
+    }
+    
+    return ability;
+}
+
+  private async generateAbilityName(effects: AbilityEffect[], element: ElementType): Promise<string> {
+    try {
+      const effectTypes = effects.map(e => e.type.toLowerCase()).join(' and ');
+      const prompt = `Create a meme-themed ability name that combines ${effectTypes} 
+        for a ${element.toLowerCase()} card. Make it funny and reference internet culture. 
+        Keep it under 4 words. Just return the name, no explanation.`;
+
       const response = await this.openai.chat.completions.create({
         model: "gpt-3.5-turbo",
         messages: [
-          { role: "system", content: "You are a meme card ability name generator." },
+          { role: "system", content: "You are a creative meme ability name generator." },
           { role: "user", content: prompt }
         ],
-        max_tokens: 50,
-        temperature: 0.7
+        max_tokens: 20,
+        temperature: 0.8
       });
-    
-      ability = {
-        name: response.choices[0]?.message?.content?.replace('Name: ', '').trim() || "Mystery Ability",
-        type: abilityType,
-        effect: {
-          type: effectType,
-          value,
-          target: this.getAbilityTarget(effectType)
-        },
-        limitation
-      };
-      
-      attempts++;
-    } while (!this.validateAbilityBalance(ability, rarity) && attempts < 3);
 
-    // If we still couldn't generate a balanced ability, force the values to be valid
-    if (!this.validateAbilityBalance(ability, rarity)) {
-      const maxValues = {
-        DAMAGE: { COMMON: 2, RARE: 3, EPIC: 4, LEGENDARY: 5, MYTHIC: 6, GOD_TIER: 8 },
-        HEAL: { COMMON: 3, RARE: 4, EPIC: 5, LEGENDARY: 6, MYTHIC: 7, GOD_TIER: 9 },
-        BUFF: { COMMON: 2, RARE: 3, EPIC: 4, LEGENDARY: 5, MYTHIC: 6, GOD_TIER: 7 },
-        DEBUFF: { COMMON: 2, RARE: 3, EPIC: 4, LEGENDARY: 5, MYTHIC: 6, GOD_TIER: 7 },
-        DRAW: { COMMON: 1, RARE: 1, EPIC: 2, LEGENDARY: 2, MYTHIC: 3, GOD_TIER: 3 }
-      };
-      
-      ability.effect.value = maxValues[ability.effect.type][rarity];
-    }
-
-    return ability;
-  }
-  
-  private generateLimitation(rarity: RarityType, value: number): string {
-    const limitations = {
-      COMMON: 'once per turn',
-      RARE: value > 3 ? 'once per turn' : 'twice per turn',
-      EPIC: value > 4 ? 'once per turn' : 'costs 1 mana',
-      LEGENDARY: 'costs 2 mana',
-      MYTHIC: 'once per game',
-      GOD_TIER: 'costs 3 mana'
-    };
-    return limitations[rarity];
-  }
-  
-  private getAbilityTarget(effectType: EffectType): string {
-    const targets = {
-      DAMAGE: 'opponent or their card',
-      HEAL: 'your cards or yourself',
-      BUFF: 'your cards',
-      DEBUFF: 'opponent\'s cards',
-      DRAW: 'you'
-    };
-    return targets[effectType];
-  }
-  
-  private formatAbilityDescription(ability: StructuredAbility): string {
-    return `${ability.type}: ${ability.effect.type} ${ability.effect.value} to ${ability.effect.target}. ${ability.limitation}.`;
-  }
-
-  private validateAbilityBalance(ability: StructuredAbility, rarity: RarityType): boolean {
-    const maxValues = {
-      DAMAGE: { COMMON: 2, RARE: 3, EPIC: 4, LEGENDARY: 5, MYTHIC: 6, GOD_TIER: 8 },
-      HEAL: { COMMON: 3, RARE: 4, EPIC: 5, LEGENDARY: 6, MYTHIC: 7, GOD_TIER: 9 },
-      BUFF: { COMMON: 2, RARE: 3, EPIC: 4, LEGENDARY: 5, MYTHIC: 6, GOD_TIER: 7 },
-      DEBUFF: { COMMON: 2, RARE: 3, EPIC: 4, LEGENDARY: 5, MYTHIC: 6, GOD_TIER: 7 },
-      DRAW: { COMMON: 1, RARE: 1, EPIC: 2, LEGENDARY: 2, MYTHIC: 3, GOD_TIER: 3 }
-    };
-  
-    return ability.effect.value <= maxValues[ability.effect.type][rarity];
-  }
-
-  private async generateImage(element: ElementType, rarity: RarityType, name: string): Promise<string> {
-    try {
-      const imagePrompt = await this.generateImagePrompt(element, rarity, name);
-      console.log('Generated image prompt:', imagePrompt);
-
-      const output = await this.replicate.run(
-        "ideogram-ai/ideogram-v2",
-        {
-          input: {
-            prompt: imagePrompt,
-            negative_prompt: "text, watermark, logo, low quality, blurry, distorted",
-            style: "photo",
-            width: 768,
-            height: 768,
-          }
-        }
-      ) as string | ReadableStream | string[] | { url: string };
-
-      if (output instanceof ReadableStream) {
-        const reader = output.getReader();
-        const chunks: Uint8Array[] = [];
-        
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          if (value) chunks.push(value);
-        }
-        
-        const concatenated = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0));
-        let offset = 0;
-        for (const chunk of chunks) {
-          concatenated.set(chunk, offset);
-          offset += chunk.length;
-        }
-
-        return `data:image/png;base64,${Buffer.from(concatenated).toString('base64')}`;
-      }
-
-      if (typeof output === 'string') {
-        if (output.startsWith('http') || output.startsWith('data:')) {
-          return output;
-        }
-        try {
-          const base64Test = Buffer.from(output, 'base64').toString('base64');
-          if (base64Test) {
-            return `data:image/png;base64,${output}`;
-          }
-        } catch {
-          // Not valid base64, fall through to default
-        }
-      }
-
-      if (Array.isArray(output) && output.length > 0 && typeof output[0] === 'string') {
-        if (output[0].startsWith('http') || output[0].startsWith('data:')) {
-          return output[0];
-        }
-        try {
-          return `data:image/png;base64,${output[0]}`;
-        } catch {
-          // Not valid base64, fall through to default
-        }
-      }
-
-      if (typeof output === 'object' && output !== null && 'url' in output) {
-        return output.url;
-      }
-
-      return '/api/placeholder/400/400';
+      return response.choices[0]?.message?.content?.trim() || "Mystery Ability";
     } catch (error) {
-      console.error('Error generating image:', error);
-      return '/api/placeholder/400/400';
+      console.error('Error generating ability name:', error);
+      return `${element} Power`;
     }
+  }
+
+  private formatAbilityDescription(ability: StructuredAbility): string {
+    const parts: string[] = [];
+    
+    // Add type and cost if present
+    let triggerDesc = '';
+    switch(ability.type) {
+      case 'ENTER_BATTLEFIELD':
+        triggerDesc = 'When this card enters the battlefield';
+        break;
+      case 'ATTACK_TRIGGER':
+        triggerDesc = 'When this card attacks';
+        break;
+      case 'DEATH_TRIGGER':
+        triggerDesc = 'When this card is destroyed';
+        break;
+      case 'PASSIVE':
+        triggerDesc = 'Passive effect';
+        break;
+    }
+    
+    parts.push(`${triggerDesc}${ability.cost ? ` (Cost: ${ability.cost} mana)` : ''}`);
+    
+    // Add each effect with explicit descriptions
+    ability.effects.forEach((effect) => {
+      let effectDesc = '';
+      
+      switch(effect.type) {
+        case 'DAMAGE':
+          effectDesc = `Deal ${effect.value} damage to ${this.formatTarget(effect.target)}`;
+          break;
+        case 'HEAL':
+          effectDesc = `Restore ${effect.value} HP to ${this.formatTarget(effect.target)}`;
+          break;
+        case 'BUFF':
+          const buffStat = effect.metadata?.stat || 'BOTH';
+          const buffDuration = effect.metadata?.duration || 1;
+          effectDesc = `Increase ${this.formatTarget(effect.target)}'s ${this.formatStat(buffStat)} by ${effect.value} for ${buffDuration} turn${buffDuration > 1 ? 's' : ''}`;
+          break;
+        case 'DEBUFF':
+          const debuffStat = effect.metadata?.stat || 'BOTH';
+          const debuffDuration = effect.metadata?.duration || 1;
+          effectDesc = `Reduce ${this.formatTarget(effect.target)}'s ${this.formatStat(debuffStat)} by ${effect.value} for ${debuffDuration} turn${debuffDuration > 1 ? 's' : ''}`;
+          break;
+        case 'DRAW':
+          effectDesc = `Draw ${effect.value} card${effect.value > 1 ? 's' : ''}`;
+          break;
+      }
+      
+      if (effect.condition) {
+        effectDesc += ` when ${this.formatCondition(effect.condition)}`;
+      }
+      
+      parts.push(effectDesc);
+    });
+    
+    // Add limitation and cooldown
+    if (ability.cooldown) {
+      parts.push(`Cooldown: ${ability.cooldown} turns`);
+    }
+    parts.push(ability.limitation);
+    
+    return parts.join('. ');
+  }
+
+  private formatTarget(target: Target): string {
+    const targetDescriptions: Record<Target, string> = {
+      'SELF': 'your hero',
+      'OPPONENT': 'the enemy hero',
+      'ALL_CARDS': 'all cards',
+      'OWN_CARDS': 'your cards',
+      'OPPONENT_CARDS': 'enemy cards',
+      'RANDOM_CARD': 'a random card',
+      'CHOSEN_CARD': 'target card'
+    };
+    return targetDescriptions[target];
+  }
+
+  private formatStat(stat: string): string {
+    switch(stat) {
+      case 'ATTACK':
+        return 'Attack';
+      case 'DEFENSE':
+        return 'Defense';
+      case 'BOTH':
+        return 'Attack and Defense';
+      default:
+        return stat;
+    }
+  }
+
+  private formatCondition(condition: Condition): string {
+    const conditions: Record<Condition, string> = {
+      'NONE': '',
+      'HP_BELOW_50': 'HP is below 50%',
+      'HAND_EMPTY': 'hand is empty',
+      'BOARD_FULL': 'board is full',
+      'ELEMENT_MATCH': 'another card of same element is played',
+      'COMBO': 'used after another ability'
+    };
+    return conditions[condition];
+  }
+
+  private generateLimitation(rarity: RarityType, totalPower: number): string {
+    const limitations: Record<RarityType, string[]> = {
+      COMMON: ['once per turn'],
+      RARE: ['once per turn', 'costs 1 mana'],
+      EPIC: ['once per turn', 'costs 2 mana'],
+      LEGENDARY: ['costs 2 mana', 'twice per game'],
+      MYTHIC: ['once per game', 'costs 3 mana'],
+      GOD_TIER: ['once per game & costs 4 mana']
+    };
+
+    const possibleLimitations = limitations[rarity];
+    return possibleLimitations[Math.floor(Math.random() * possibleLimitations.length)];
   }
 
   private async generateImagePrompt(element: ElementType, rarity: RarityType, name: string): Promise<string> {
@@ -310,6 +524,204 @@ export class MemeCardGenerator {
 
     return response.choices[0]?.message?.content || `${style} ${element} card illustration`;
   }
+
+  // Keep existing methods for image generation, flavor text, etc.
+  private async generateImage(element: ElementType, rarity: RarityType, name: string): Promise<string> {
+    const basePrompt = await this.generateImagePrompt(element, rarity, name);
+      console.log('Generated base prompt:', basePrompt);
+  
+    try {
+      
+      // Select model based on rarity
+      let modelConfig;
+      switch(rarity) {
+        case 'GOD_TIER':
+          modelConfig = this.IMAGE_MODELS.DIVINE;
+          break;
+        case 'MYTHIC':
+        case 'LEGENDARY':
+          modelConfig = this.IMAGE_MODELS.PREMIUM;
+          break;
+        case 'EPIC':
+        case 'RARE':
+          modelConfig = this.IMAGE_MODELS.ENHANCED;
+          break;
+        default:
+          modelConfig = this.IMAGE_MODELS.BASIC;
+      }
+  
+      const enhancedPrompt = this.enhancePromptForRarity(basePrompt, rarity);
+      const negativePrompt = this.getNegativePromptForRarity(rarity);
+  
+      console.log(`Using ${modelConfig.model} for ${rarity} card`);
+      console.log('Enhanced prompt:', enhancedPrompt);
+  
+      const output = await this.replicate.run(
+        `${modelConfig.model}:${modelConfig.version}`,
+        {
+          input: {
+            prompt: enhancedPrompt,
+            negative_prompt: negativePrompt,
+            ...modelConfig.config
+          }
+        }
+      ) as string | ReadableStream<any> | string[] | { url: string };
+
+        console.log("This is the output", output);
+        console.log("Type of output:", typeof output);
+
+          // Check for specific cases
+          if (output instanceof ReadableStream) {
+            console.log("Output is a ReadableStream");
+          } else if (Array.isArray(output)) {
+            console.log("Output is an array:", output);
+          } else if (typeof output === 'object' && output !== null && 'url' in output) {
+            console.log("Output is an object with a URL:", output.url);
+          } else if (typeof output === 'string') {
+            console.log("Output is a string:", output);
+          } else {
+            console.log("Unknown output type:", output);
+          }
+
+
+      return await this.processModelOutput(output);
+    } catch (error) {
+      console.error('Error generating image:', error);
+      console.error('Error details:', error instanceof Error ? error.message : error);
+      
+      // Fallback to a simpler model if the premium one fails
+      if (rarity !== 'COMMON') {
+        console.log('Attempting fallback to basic model...');
+        try {
+          const basicConfig = this.IMAGE_MODELS.BASIC;
+          const fallbackPrompt = this.enhancePromptForRarity(basePrompt, 'COMMON');
+          const fallbackNegative = this.getNegativePromptForRarity('COMMON');
+          
+          const output = await this.replicate.run(
+            `${basicConfig.model}:${basicConfig.version}`,
+            {
+              input: {
+                prompt: fallbackPrompt,
+                negative_prompt: fallbackNegative,
+                ...basicConfig.config
+              }
+            }
+          ) as string | ReadableStream<any> | string[] | { url: string };
+          
+          return await this.processModelOutput(output);
+        } catch (fallbackError) {
+          console.error('Fallback also failed:', fallbackError);
+        }
+      }
+      console.log("Could NOT GENERATE IMAGEEEEE")
+      return '/api/placeholder/400/400';
+    }
+  }
+  
+  private enhancePromptForRarity(basePrompt: string, rarity: RarityType): string {
+    const qualities = {
+      COMMON: "trading card game art, digital illustration",
+      RARE: "detailed digital artwork, vibrant colors",
+      EPIC: "epic fantasy art, highly detailed, dramatic lighting",
+      LEGENDARY: "masterful digital artwork, ultra detailed, cinematic quality",
+      MYTHIC: "ethereal masterpiece, photorealistic, extraordinary detail",
+      GOD_TIER: "divine masterpiece, hyperrealistic, celestial quality"
+    };
+  
+    const style = ", perfect composition, centered, card game art style";
+    return `${basePrompt}, ${qualities[rarity]}${style}, trending on artstation, award winning digital art`;
+  }
+  
+  private getNegativePromptForRarity(rarity: RarityType): string {
+    const baseNegative = "blur, noise, text, watermark, signature, low quality, deformed";
+    
+    if (rarity === 'GOD_TIER' || rarity === 'MYTHIC' || rarity === 'LEGENDARY') {
+      return `${baseNegative}, simple, basic, amateur, cartoon`;
+    }
+    
+    return baseNegative;
+  }
+
+  private isReadableStream(value: unknown): value is ReadableStream {
+    return value instanceof Object && typeof (value as ReadableStream).getReader === 'function';
+  }
+  
+  private async processModelOutput(output: string | ReadableStream | string[] | { url: string }): Promise<string> {
+    try {
+      // Handle arrays
+      if (Array.isArray(output) && output.length > 0) {
+        const firstOutput = output[0];
+        if (this.isReadableStream(firstOutput)) {
+          console.log("Processing first element of array as a ReadableStream...");
+          return await this.processReadableStream(firstOutput);
+        } else if (typeof firstOutput === 'string') {
+          console.log("Processing first element of array as a string:", firstOutput);
+          if (firstOutput.startsWith('http') || firstOutput.startsWith('data:')) {
+            return firstOutput;
+          }
+          try {
+            return `data:image/png;base64,${firstOutput}`;
+          } catch {
+            return '/api/placeholder/400/400';
+          }
+        }
+      }
+  
+      // Handle single ReadableStream
+      if (this.isReadableStream(output)) {
+        console.log("Processing output as a ReadableStream...");
+        return await this.processReadableStream(output);
+      }
+  
+      // Handle strings
+      if (typeof output === 'string') {
+        if (output.startsWith('http') || output.startsWith('data:')) {
+          return output;
+        }
+        try {
+          return `data:image/png;base64,${output}`;
+        } catch {
+          return '/api/placeholder/400/400';
+        }
+      }
+  
+      // Handle objects with URL
+      if (typeof output === 'object' && output !== null && 'url' in output) {
+        return output.url;
+      }
+  
+      return '/api/placeholder/400/400';
+    } catch (error) {
+      console.error('Error processing model output:', error);
+      return '/api/placeholder/400/400';
+    }
+  }
+  
+  
+  // Helper method to process a ReadableStream
+  private async processReadableStream(stream: ReadableStream): Promise<string> {
+    const reader = stream.getReader();
+    const chunks: Uint8Array[] = [];
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        chunks.push(value);
+      }
+    }
+    
+    const concatenated = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0));
+    let offset = 0;
+    for (const chunk of chunks) {
+      concatenated.set(chunk, offset);
+      offset += chunk.length;
+    }
+  
+    return `data:image/png;base64,${Buffer.from(concatenated).toString('base64')}`;
+  }
+  
+  
 
   private async generateFlavorText(name: string, element: ElementType): Promise<string> {
     try {
@@ -365,14 +777,48 @@ export class MemeCardGenerator {
     return { attack, defense, cost };
   }
 
+  public async generateCard(): Promise<Card> {
+    try {
+      const rarity = this.getWeightedRarity();
+      const element = this.getElementForRarity(rarity);
+      const name = await this.generateCardName(element, rarity);
+      const stats = this.generateStats(element, rarity);
+      const ability = await this.generateAbility(element, rarity);
+      const image_path = await this.generateImage(element, rarity, name);
+      const flavor_text = await this.generateFlavorText(name, element);
+  
+      // Take the first effect as the primary effect for backwards compatibility
+      const primaryEffect = ability.effects[0];
+  
+      return {
+        name,
+        stats: {
+          ...stats,
+          element,
+          rarity,
+          ability_name: ability.name,
+          ability_description: this.formatAbilityDescription(ability),
+          ability_type: ability.type,
+          effect: primaryEffect, // Set the primary effect for backward compatibility
+          limitation: ability.limitation
+        },
+        image_path,
+        flavor_text
+      };
+    } catch (error) {
+      console.error('Error in card generation:', error);
+      throw error;
+    }
+  }
+
   private getWeightedRarity(): RarityType {
     const weights = {
-      COMMON: 60,     // 60% chance
-      RARE: 25,       // 25% chance
-      EPIC: 10,       // 10% chance
-      LEGENDARY: 4,   // 4% chance
-      MYTHIC: 0.9,    // 0.9% chance
-      GOD_TIER: 0.1   // 0.1% chance
+      COMMON: 70,     // 70% chance
+      RARE: 20,       // 20% chance
+      EPIC: 7,        // 7% chance
+      LEGENDARY: 2.89, // 2.89% chance
+      MYTHIC: 0.1,    // 0.1% chance
+      GOD_TIER: 0.01  // 0.01% chance
     };
     
     const totalWeight = Object.values(weights).reduce((sum, weight) => sum + weight, 0);
@@ -410,39 +856,5 @@ export class MemeCardGenerator {
     }
     
     return 'WHOLESOME'; // Fallback
-  }
-
-  public async generateCard(): Promise<Card> {
-    try {
-      const rarity = this.getWeightedRarity();
-      const element = this.getElementForRarity(rarity); 
-      const name = await this.generateCardName(element, rarity);
-      const stats = this.generateStats(element, rarity);
-      
-      // Get full structured ability
-      const ability = await this.generateAbility(element, rarity);
-      
-      const image_path = await this.generateImage(element, rarity, name);
-      const flavor_text = await this.generateFlavorText(name, element);
-
-      return {
-        name,
-        stats: {
-          ...stats,
-          element,
-          rarity,
-          ability_name: ability.name,
-          ability_description: ability.description,
-          ability_type: ability.type,
-          effect: ability.effect,
-          limitation: ability.limitation
-        },
-        image_path,
-        flavor_text
-      };
-    } catch (error) {
-      console.error('Error in card generation:', error);
-      throw error;
-    }
   }
 }
