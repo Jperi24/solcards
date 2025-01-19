@@ -4,7 +4,6 @@ import "../app/globals.css"; // Import the global CSS where Tailwind directives 
 
 
 function MyApp({ Component, pageProps }) {
-  
   return <Component {...pageProps} />; // Renders the current page
 }
 
